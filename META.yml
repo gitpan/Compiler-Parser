@@ -3,9 +3,11 @@ abstract: 'Create Abstract Syntax Tree for Perl5'
 author:
   - 'Masaaki Goshima (goccy) <goccy54@gmail.com>'
 build_requires:
+  Compiler::Lexer: 0.13
   Devel::PPPort: 3.19
   ExtUtils::MakeMaker: 6.59
   ExtUtils::ParseXS: 2.21
+  Test::More: 0
 configure_requires:
   CPAN::Meta: 0
   CPAN::Meta::Prereqs: 0
@@ -26,7 +28,7 @@ no_index:
 provides:
   Compiler::Parser:
     file: lib/Compiler/Parser.pm
-    version: 0.01
+    version: 0.02
   Compiler::Parser::AST:
     file: lib/Compiler/Parser/AST.pm
   Compiler::Parser::AST::Renderer:
@@ -88,6 +90,6 @@ resources:
   bugtracker: https://github.com/goccy/p5-Compiler-Parser/issues
   homepage: https://github.com/goccy/p5-Compiler-Parser
   repository: git://github.com/goccy/p5-Compiler-Parser.git
-version: 0.01
+version: 0.02
 x_contributors:
   - 'masaaki.goshima <masaaki.goshima@mixi.co.jp>'
