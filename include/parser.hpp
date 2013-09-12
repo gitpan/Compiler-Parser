@@ -98,7 +98,25 @@ public:
 class RegPrefixNode : public Node {
 public:
 	Node *exp;
+	Node *option;
 	RegPrefixNode(Token *tk);
+	void dump(size_t depth);
+};
+
+class RegReplaceNode : public Node {
+public:
+	Node *prefix;
+	Node *from;
+	Node *to;
+	Node *option;
+	RegReplaceNode(Token *tk);
+	void dump(size_t depth);
+};
+
+class RegexpNode : public Node {
+public:
+	Node *option;
+	RegexpNode(Token *tk);
 	void dump(size_t depth);
 };
 
@@ -251,7 +269,10 @@ public:
 	bool isForStmtPattern(Token *tk, Token *expr);
 	bool isSingleTermOperator(ParseContext *pctx, Token *tk);
 	bool isIrregularFunction(ParseContext *pctx, Token *tk);
+	bool isMissingSemicolon(Enum::Token::Type::Type prev_type, Enum::Token::Type::Type type, Tokens *tokens);
+	bool isMissingSemicolon(Tokens *tokens);
 	bool canGrouping(Token *tk, Token *next_tk);
+	Token *replaceToStmt(Tokens *tokens, Token *cur_tk, size_t offset);
 	void parseStmt(ParseContext *pctx, Node *stmt);
 	void parseExpr(ParseContext *pctx, Node *expr);
 	void parseToken(ParseContext *pctx, Token *tk);
@@ -266,6 +287,7 @@ public:
 	void parseModule(ParseContext *pctx, Token *mod);
 	void parseModuleArgument(ParseContext *pctx, Token *args);
 	void parseRegPrefix(ParseContext *pctx, Token *reg);
+	void parseRegReplace(ParseContext *pctx, Token *reg);
 	void parseFunction(ParseContext *pctx, Token *func);
 	void parseFunctionCall(ParseContext *pctx, Token *func);
 	void parseIrregularFunction(ParseContext *pctx, Token *func);

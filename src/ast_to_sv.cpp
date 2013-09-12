@@ -209,8 +209,25 @@ static SV *node_to_sv(pTHX_ Node *node)
 		HV *hash = (HV*)new_Hash();
 		add_token(hash, reg->tk);
 		add_key(hash, "next", reg->next);
+		add_key(hash, "option", reg->option);
 		add_key(hash, "expr", reg->exp);
 		ret = bless(aTHX_ hash, "Compiler::Parser::Node::RegPrefix");
+	} else if (TYPE_match(node, RegReplaceNode)) {
+		RegReplaceNode *reg = dynamic_cast<RegReplaceNode *>(node);
+		HV *hash = (HV*)new_Hash();
+		add_token(hash, reg->tk);
+		add_key(hash, "next", reg->next);
+		add_key(hash, "from", reg->from);
+		add_key(hash, "to", reg->to);
+		add_key(hash, "option", reg->option);
+		ret = bless(aTHX_ hash, "Compiler::Parser::Node::RegReplace");
+	} else if (TYPE_match(node, RegexpNode)) {
+		RegexpNode *reg = dynamic_cast<RegexpNode *>(node);
+		HV *hash = (HV*)new_Hash();
+		add_token(hash, reg->tk);
+		add_key(hash, "next", reg->next);
+		add_key(hash, "option", reg->option);
+		ret = bless(aTHX_ hash, "Compiler::Parser::Node::Regexp");
 	} else {
 		assert(0 && "node type is not found");
 	}

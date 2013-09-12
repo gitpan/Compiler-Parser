@@ -6,9 +6,9 @@ namespace TokenKind = Enum::Token::Kind;
 namespace SyntaxType = Enum::Parser::Syntax;
 
 static jmp_buf jmp_point;
-static void Parse_exception(const char *msg, size_t line)
+static void Parser_exception(const char *msg, size_t line)
 {
-	fprintf(stderr, "[ERROR]: syntax error : %s at %ld\n", msg, line);
+	fprintf(stderr, "[ERROR]: syntax error : %s at %zd\n", msg, line);
 	longjmp(jmp_point, 1);
 }
 
@@ -56,7 +56,7 @@ Node *ParseContext::lastNode(void)
 Token *ParseContext::token(Token *base, int offset)
 {
 	Token *ret = nullableToken(base, offset);
-	if (!ret) Parse_exception("", base->finfo.start_line_num);
+	if (!ret) Parser_exception("", base->finfo.start_line_num);
 	return ret;
 }
 
@@ -184,7 +184,7 @@ void Parser::replaceHereDocument(Tokens *tokens)
 			break;
 		case TokenType::HereDocument:
 			if (tag_pos == start_pos) {
-				Parse_exception("nothing use HereDocumentTag", __LINE__);
+				Parser_exception("nothing use HereDocumentTag", __LINE__);
 			} else {
 				Token *tag = ITER_CAST(Token *, tag_pos);
 				switch (tag->info.type) {
@@ -193,8 +193,10 @@ void Parser::replaceHereDocument(Tokens *tokens)
 					tag->data = "qq{" + t->data + "}";
 					break;
 				case TokenType::HereDocumentRawTag:
-					tag->info = getTokenInfo(TokenType::RegQuote);//RawString);
-					tag->data = "q{" + t->data + "}";
+					tag->data = t->data;
+					tag->info = getTokenInfo(TokenType::RawString);
+					//tag->info = getTokenInfo(TokenType::RegQuote);//RawString);
+					//tag->data = "q{" + t->data + "}";
 					break;
 				default:
 					break;
@@ -234,6 +236,55 @@ bool Parser::isExpr(Token *tk, Token *prev_tk, TokenType::Type type, TokenKind::
 	return false;
 }
 
+bool Parser::isMissingSemicolon(TokenType::Type prev_type, TokenType::Type type, Tokens *tokens)
+{
+	using namespace TokenType;
+	if (type == RightBrace && prev_type != SemiColon) {
+		size_t size = tokens->size();
+		for (size_t i = 0; i < size; i++) {
+			if (tokens->at(i)->stype == SyntaxType::Stmt) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool Parser::isMissingSemicolon(Tokens *tokens)
+{
+	using namespace TokenType;
+	Token *tk = tokens->back();
+	if (tk->stype != SyntaxType::Stmt) {
+		size_t size = tokens->size();
+		for (size_t i = 0; i < size; i++) {
+			if (tokens->at(i)->stype == SyntaxType::Stmt) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+Token *Parser::replaceToStmt(Tokens *cur_tokens, Token *cur_tk, size_t offset)
+{
+	Tokens *stmt = new Tokens();
+	for (size_t i = 0; i < offset - 1; i++) {
+		Token *tk = cur_tokens->back();
+		i += (tk->total_token_num > 0) ? tk->total_token_num - 1 : 0;
+		stmt->insert(stmt->begin(), tk);
+		cur_tokens->pop_back();
+	}
+	Token *semicolon = new Token(";", cur_tk->finfo);
+	semicolon->info.type = TokenType::SemiColon;
+	semicolon->info.name = "SemiColon";
+	semicolon->info.kind = TokenKind::StmtEnd;
+	stmt->push_back(semicolon);
+	Token *stmt_ = new Token(stmt);
+	stmt_->stype = SyntaxType::Stmt;
+	cur_tokens->push_back(stmt_);
+	return stmt_;
+}
+
 Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 {
 	using namespace TokenType;
@@ -255,7 +306,7 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 		case LeftBracket: case LeftParenthesis:
 		case ArrayDereference: case HashDereference: case ScalarDereference:
 		case ArraySizeDereference: {
-			if (pos + 1 == end_pos) Parse_exception("nothing end flagment", t->finfo.start_line_num);
+			if (pos + 1 == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
 			pos++;
 			Token *syntax = parseSyntax(t, tokens);
 			syntax->stype = SyntaxType::Expr;
@@ -266,7 +317,7 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 		case LeftBrace: {
 			Token *prev = (pos != start_pos) ? ITER_CAST(Token *, pos-1) : NULL;
 			if (prev) prev_type = prev->info.type;
-			if (pos + 1 == end_pos) Parse_exception("nothing end flagment", t->finfo.start_line_num);
+			if (pos + 1 == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
 			pos++;
 			Token *syntax = parseSyntax(t, tokens);
 			if (isExpr(syntax, prev_syntax, prev_type, prev_kind)) {
@@ -278,6 +329,7 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 				syntax->stype = SyntaxType::BlockStmt;
 			} else {
 				syntax->stype = SyntaxType::BlockStmt;
+				if (pos == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
 				if (pos+1 != tokens->end()) {
 					Token *next_tk = ITER_CAST(Token *, pos+1);
 					if (next_tk && next_tk->info.type != SemiColon) {
@@ -289,26 +341,19 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 			prev_syntax = syntax;
 			break;
 		}
-		case RightBrace: case RightBracket: case RightParenthesis:
+		case RightBrace: case RightBracket: case RightParenthesis: {
+			if (isMissingSemicolon(prev_type, t->info.type, new_tokens)) {
+				prev_syntax = replaceToStmt(new_tokens, t, pos - intermediate_pos);
+			}
 			new_tokens->push_back(t);
 			return new Token(new_tokens);
 			break; /* not reached this stmt */
+		}
 		case SemiColon: {
 			size_t k = pos - intermediate_pos;
 			if (start_pos == intermediate_pos) k++;
-			Tokens *stmt = new Tokens();
-			for (size_t j = 0; j < k - 1; j++) {
-				Token *tk = new_tokens->back();
-				j += (tk->total_token_num > 0) ? tk->total_token_num - 1 : 0;
-				stmt->insert(stmt->begin(), tk);
-				new_tokens->pop_back();
-			}
-			stmt->push_back(t);
-			Token *stmt_ = new Token(stmt);
-			stmt_->stype = SyntaxType::Stmt;
-			new_tokens->push_back(stmt_);
+			prev_syntax = replaceToStmt(new_tokens, t, k);
 			intermediate_pos = pos;
-			prev_syntax = stmt_;
 			break;
 		}
 		default:
@@ -318,7 +363,11 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 		}
 		prev_kind = kind;
 		prev_type = type;
+		if (pos == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
 		pos++;
+	}
+	if (isMissingSemicolon(new_tokens)) {
+		replaceToStmt(new_tokens, new_tokens->back(), pos - intermediate_pos);
 	}
 	return new Token(new_tokens);
 }
@@ -412,7 +461,7 @@ void Parser::parseSpecificStmt(Token *syntax)
 					tk_n -= (pattern_size - 1);
 					parseSpecificStmt(tks[i]->tks[4]);
 				} else {
-					//fprintf(stderr, "Syntax Error!: near by line[%lu]\n", tk->finfo.start_line_num);
+					//fprintf(stderr, "Syntax Error!: near by line[%zu]\n", tk->finfo.start_line_num);
 					//exit(EXIT_FAILURE);
 				}
 			}
@@ -436,14 +485,14 @@ void Parser::parseSpecificStmt(Token *syntax)
 				tk_n -= 1;
 				parseSpecificStmt(tks[i]->tks[1]);
 			} else if (tk_n > i+2 &&
-				tks[i+1]->info.type == Function &&
+			    (tks[i+1]->info.type == Function || tks[i+1]->info.type == Namespace) &&
 				tks[i+2]->stype == SyntaxType::BlockStmt) {
 				/* sub func BlockStmt */
 				insertStmt(syntax, i, 3);
 				tk_n -= 2;
 				parseSpecificStmt(tks[i]->tks[2]);
 			} else if (tk_n > i+3 &&
-				tks[i+1]->info.type == Function &&
+			    (tks[i+1]->info.type == Function || tks[i+1]->info.type == Namespace) &&
 				tks[i+2]->stype == SyntaxType::Expr &&
 				tks[i+3]->stype == SyntaxType::BlockStmt) {
 				/* sub func Expr BlockStmt */
@@ -480,7 +529,7 @@ void Parser::setIndent(Token *syntax, int indent)
 			tk->finfo.indent = ++indent;
 			setIndent(tk, indent);
 			if (indent == 0) {
-				fprintf(stderr, "ERROR!!: syntax error near %s:%lu\n", tk->finfo.filename, tk->finfo.start_line_num);
+				fprintf(stderr, "ERROR!!: syntax error near %s:%zu\n", tk->finfo.filename, tk->finfo.start_line_num);
 				exit(EXIT_FAILURE);
 			}
 			indent--;
@@ -638,6 +687,7 @@ AST *Parser::parse(Tokens *tokens)
 		completer.complete(root);
 		//dumpSyntax(root, 0);
 		Node *last_stmt = _parse(root);
+		if (!last_stmt) Parser_exception("", 1);
 		return new AST(last_stmt->getRoot());
 	} else {
 		//catched exception
@@ -714,6 +764,9 @@ void Parser::parseToken(ParseContext *pctx, Token *tk)
 	switch (tk->info.kind) {
 	case RegPrefix:
 		parseRegPrefix(pctx, tk);
+		break;
+	case RegReplacePrefix:
+		parseRegReplace(pctx, tk);
 		break;
 	case Decl: case Package:
 		DBG_PL("DECL");
@@ -894,8 +947,54 @@ void Parser::parseRegPrefix(ParseContext *pctx, Token *tk)
 	pctx->next();
 	LeafNode *leaf = new LeafNode(exp);
 	reg->exp = leaf;
+	Token *option = pctx->nextToken();
+	if (option) {
+		reg->option = new LeafNode(option);
+		pctx->next();
+	}
 	BranchNode *node = dynamic_cast<BranchNode *>(pctx->lastNode());
 	return (!node) ? pctx->pushNode(reg) : node->link(reg);
+}
+
+void Parser::parseRegReplace(ParseContext *pctx, Token *tk)
+{
+	RegReplaceNode *replace = new RegReplaceNode(tk);
+	Token *start_delim = pctx->nextToken();
+	if (!(start_delim && start_delim->info.type == TokenType::RegDelim)) {
+		Parser_exception("not start delimiter", tk->finfo.start_line_num);
+	}
+	pctx->next();
+	Token *replace_from = pctx->nextToken();
+	if (!(replace_from && replace_from->info.type == TokenType::RegReplaceFrom)) {
+		Parser_exception("replace expression", tk->finfo.start_line_num);
+	} else {
+		replace->from = new LeafNode(replace_from);
+	}
+	pctx->next();
+	Token *middle_delim = pctx->nextToken();
+	if (!(middle_delim && middle_delim->info.type == TokenType::RegMiddleDelim)) {
+		Parser_exception("replace expression", tk->finfo.start_line_num);
+	}
+	pctx->next();
+	Token *replace_to = pctx->nextToken();
+	if (!(replace_to && replace_to->info.type == TokenType::RegReplaceTo)) {
+		Parser_exception("replace expression", tk->finfo.start_line_num);
+	} else {
+		replace->to = new LeafNode(replace_to);
+	}
+	pctx->next();
+	Token *end_delim = pctx->nextToken();
+	if (!(replace_to && replace_to->info.type == TokenType::RegReplaceTo)) {
+		Parser_exception("not end delimiter", tk->finfo.start_line_num);
+	}
+	pctx->next();
+	Token *option = pctx->nextToken();
+	if (option) {
+		replace->option = new LeafNode(option);
+		pctx->next();
+	}
+	BranchNode *node = dynamic_cast<BranchNode *>(pctx->lastNode());
+	return (!node) ? pctx->pushNode(replace) : node->link(replace);
 }
 
 void Parser::parseDecl(ParseContext *pctx, Token *tk)
@@ -1064,7 +1163,7 @@ void Parser::parseSingleTermOperator(ParseContext *pctx, Token *tk)
 	TokenType::Type type = tk->info.type;
 	SingleTermOperatorNode *op_node = NULL;
 	if ((type == IsNot || type == Ref || type == Add || type == BitAnd ||
-		 type == Sub   || type == BitNot) ||
+		 type == ArraySize || type == Sub   || type == BitNot) ||
 		((type == Inc || type == Dec) && pctx->idx == 0)) {
 		Token *next_tk = pctx->token(tk, 1);
 		assert(next_tk && "syntax error near by single term operator");
@@ -1106,7 +1205,7 @@ bool Parser::isSingleTermOperator(ParseContext *pctx, Token *tk)
 {
 	using namespace TokenType;
 	TokenType::Type type = tk->info.type;
-	if (type == IsNot || type == Ref || type == Inc ||
+	if (type == IsNot || type == Ref || type == Inc || type == ArraySize ||
 		type == Dec   || type == BitNot) return true;
 	if ((type == Add || type == Sub || type == BitAnd) && pctx->idx == 0) return true;
 	return false;
@@ -1131,7 +1230,7 @@ void Parser::parseFunction(ParseContext *pctx, Token *tk)
 	using namespace SyntaxType;
 	FunctionNode *f = new FunctionNode(tk);
 	Token *next_tk = pctx->nextToken();
-	if (tk->info.type == TokenType::Function &&
+	if ((tk->info.type == TokenType::Function || tk->info.type == TokenType::Namespace) &&
 		next_tk && next_tk->stype == Expr) {
 		/* sub name () {} */
 		Token *after_next_tk = pctx->token(tk, 2);
@@ -1148,7 +1247,7 @@ void Parser::parseFunction(ParseContext *pctx, Token *tk)
 		f->body = (block_stmt_node) ? block_stmt_node->getRoot() : NULL;
 		tk->data = "sub";
 		pctx->next();
-	} else if (tk->info.type == TokenType::Function &&
+	} else if ((tk->info.type == TokenType::Function || tk->info.type == TokenType::Namespace) &&
 		next_tk && next_tk->stype == BlockStmt) {
 		/* sub name {} */
 		Node *block_stmt_node = _parse(pctx->nextToken());
@@ -1181,11 +1280,13 @@ void Parser::parseModule(ParseContext *pctx, Token *tk)
 
 void Parser::parseModuleArgument(ParseContext *pctx, Token *tk)
 {
+	using namespace TokenType;
 	Node *node = NULL;
 	TokenType::Type type = tk->info.type;
 	if (tk->stype == SyntaxType::Expr) {
 		node = _parse(tk);
-	} else if (type == TokenType::String || type == TokenType::RawString) {
+	} else if (type == String || type == RawString || type == VersionString ||
+			   type == Int || type == Double) {
 		node = new LeafNode(tk);
 	}
 	if (node) pctx->pushNode(node);
@@ -1262,6 +1363,17 @@ void Parser::parseTerm(ParseContext *pctx, Token *tk)
 		} else {
 			term = _parse(next_tk);
 		}
+	} else if (next_tk && next_tk->info.type == TokenType::RegExp) {
+		pctx->next();
+		RegexpNode *reg = new RegexpNode(next_tk);
+		if (pctx->nextToken()->info.type != TokenType::RegDelim) Parser_exception("near by regexp", tk->finfo.start_line_num);
+		pctx->next();
+		Token *option = pctx->nextToken();
+		if (option) {
+			reg->option = new LeafNode(option);
+			pctx->next();
+		}
+		term = reg;
 	} else {
 		term = new LeafNode(tk);
 	}

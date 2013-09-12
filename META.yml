@@ -14,7 +14,7 @@ configure_requires:
   Module::Build: 0.38
   Module::Build::XSUtil: 0.02
 dynamic_config: 0
-generated_by: 'Minilla/v0.6.5, CPAN::Meta::Converter version 2.132140'
+generated_by: 'Minilla/v0.6.5, CPAN::Meta::Converter version 2.132510'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -28,7 +28,7 @@ no_index:
 provides:
   Compiler::Parser:
     file: lib/Compiler/Parser.pm
-    version: 0.05
+    version: 0.06
   Compiler::Parser::AST:
     file: lib/Compiler/Parser/AST.pm
   Compiler::Parser::AST::Renderer:
@@ -77,6 +77,10 @@ provides:
     file: lib/Compiler/Parser/Node/Package.pm
   Compiler::Parser::Node::RegPrefix:
     file: lib/Compiler/Parser/Node/RegPrefix.pm
+  Compiler::Parser::Node::RegReplace:
+    file: lib/Compiler/Parser/Node/RegReplace.pm
+  Compiler::Parser::Node::Regexp:
+    file: lib/Compiler/Parser/Node/Regexp.pm
   Compiler::Parser::Node::Return:
     file: lib/Compiler/Parser/Node/Return.pm
   Compiler::Parser::Node::SingleTermOperator:
@@ -90,6 +94,7 @@ resources:
   bugtracker: https://github.com/goccy/p5-Compiler-Parser/issues
   homepage: https://github.com/goccy/p5-Compiler-Parser
   repository: git://github.com/goccy/p5-Compiler-Parser.git
-version: 0.05
+version: 0.06
 x_contributors:
   - 'masaaki.goshima <masaaki.goshima@mixi.co.jp>'
+  - 'Syohei YOSHIDA <syohex@gmail.com>'
