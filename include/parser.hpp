@@ -120,6 +120,25 @@ public:
 	void dump(size_t depth);
 };
 
+class LabelNode : public Node {
+public:
+	LabelNode(Token *tk);
+	void dump(size_t depth);
+};
+
+class HandleNode : public Node {
+public:
+	Node *expr;
+	HandleNode(Token *tk);
+	void dump(size_t depth);
+};
+
+class HandleReadNode : public Node {
+public:
+	HandleReadNode(Token *tk);
+	void dump(size_t depth);
+};
+
 class FunctionCallNode : public Node {
 public:
 	Nodes *args;
@@ -154,6 +173,15 @@ public:
 	DoubleTermOperatorNode(Token *op);
 };
 
+class ThreeTermOperatorNode : public Node {
+public:
+	Node *cond;
+	Node *true_expr;
+	Node *false_expr;
+	ThreeTermOperatorNode(Token *op);
+	void dump(size_t depth);
+};
+
 class OtherTermOperatorNode : public Node {
 public:
 	OtherTermOperatorNode(Token *op);
@@ -177,6 +205,13 @@ class ElseStmtNode : public Node {
 public:
 	Node *stmt;
 	ElseStmtNode(Token *tk);
+	void dump(size_t depth);
+};
+
+class DoStmtNode : public Node {
+public:
+	Node *stmt;
+	DoStmtNode(Token *tk);
 	void dump(size_t depth);
 };
 
@@ -280,6 +315,7 @@ public:
 	void parseTerm(ParseContext *pctx, Token *term);
 	void parseSymbol(ParseContext *pctx, Token *symbol);
 	void parseSingleTermOperator(ParseContext *pctx, Token *op);
+	void parseThreeTermOperator(ParseContext *pctx, Token *op);
 	void parseBranchType(ParseContext *pctx, Token *branch);
 	void parseSpecificKeyword(ParseContext *pctx, Token *stmt);
 	void parseSpecificStmt(ParseContext *pctx, Token *stmt);
@@ -294,6 +330,7 @@ public:
 private:
 	bool isExpr(Token *tk, Token *prev_tk, Enum::Token::Type::Type type, Enum::Token::Kind::Kind kind);
 	void insertStmt(Token *tk, int idx, size_t grouping_num);
+	void insertExpr(Token *syntax, int idx, size_t grouping_num);
 	void insertParenthesis(Tokens *tokens);
 };
 
@@ -311,7 +348,7 @@ public:
 	void completeExprFromRight(Token *root, Enum::Token::Type::Type type);
 	void completeExprFromRight(Token *root, Enum::Token::Kind::Kind kind);
 	void completePointerExpr(Token *root);
-	void completeIncDecExpr(Token *root);
+	void completeIncDecGlobExpr(Token *root);
 	void completePowerExpr(Token *root);
 	void completeSingleTermOperatorExpr(Token *root);
 	void completeRegexpMatchExpr(Token *root);
@@ -323,6 +360,7 @@ public:
 	void completeNamedUnaryOperators(Token *root);
 	void completeBitOperatorExpr(Token *root);
 	void completeAndOrOperatorExpr(Token *root);
+	void completeThreeTermOperatorExpr(Token *root);
 	void completeAssignExpr(Token *root);
 	void completeCommaArrowExpr(Token *root);
 	void completeFunctionListExpr(Token *root);

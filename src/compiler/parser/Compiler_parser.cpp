@@ -144,16 +144,6 @@ void Parser::grouping(Tokens *tokens)
 			tokens->erase(start_pos, end_pos);
 			break;
 		}
-		case ArraySize: {
-			Token *as_token = tk;
-			Token *next_tk = ITER_CAST(Token *, pos+1);
-			TokenType::Type type = next_tk->info.type;
-			if (type == Key || type == Var || type == GlobalVar) {
-				as_token->data += next_tk->data;
-				tokens->erase(pos+1);
-			}
-			break;
-		}
 		case ShortScalarDereference: case ShortArrayDereference:
 		case ShortHashDereference:   case ShortCodeDereference: {
 			Token *next_tk = ITER_CAST(Token *, pos+1);
@@ -189,14 +179,12 @@ void Parser::replaceHereDocument(Tokens *tokens)
 				Token *tag = ITER_CAST(Token *, tag_pos);
 				switch (tag->info.type) {
 				case TokenType::HereDocumentTag:
-					tag->info = getTokenInfo(TokenType::RegDoubleQuote);
-					tag->data = "qq{" + t->data + "}";
+					tag->data = t->data;
+					tag->info = getTokenInfo(TokenType::String);
 					break;
 				case TokenType::HereDocumentRawTag:
 					tag->data = t->data;
 					tag->info = getTokenInfo(TokenType::RawString);
-					//tag->info = getTokenInfo(TokenType::RegQuote);//RawString);
-					//tag->data = "q{" + t->data + "}";
 					break;
 				default:
 					break;
@@ -221,15 +209,20 @@ void Parser::replaceHereDocument(Tokens *tokens)
 bool Parser::isExpr(Token *tk, Token *prev_tk, TokenType::Type type, TokenKind::Kind kind)
 {
 	using namespace TokenType;
-	assert(tk->tks[0]->info.type == LeftBrace);
-	if (tk->token_num > 3 &&
-		(tk->tks[1]->info.type == Key   || tk->tks[1]->info.type == String) &&
-		(tk->tks[2]->info.type == Arrow || tk->tks[2]->info.type == Comma)) {
+	if (tk->tks[0]->info.type != LeftBrace) Parser_exception("", tk->finfo.start_line_num);
+	Type next_type = (tk->token_num > 1) ? tk->tks[1]->info.type : Undefined;
+	Type next_after_type = (tk->token_num > 2) ? tk->tks[2]->info.type : Undefined;
+	if (tk->token_num > 3 && (next_type == Key || next_type == String) &&
+		(next_after_type == Arrow || next_after_type == Comma)) {
 		/* { [key|"key"] [,|=>] value ... */
 		/* hash reference */
 		return true;
-	} else if (type == Pointer || type == Mul || kind == TokenKind::Term || kind == TokenKind::Function ||/* type == FunctionDecl ||*/
-			((prev_tk && prev_tk->stype == SyntaxType::Expr) && (type == RightBrace || type == RightBracket))) {
+	} else if (type == Pointer ||
+			   type == Mul || type == Glob ||
+			   kind == TokenKind::Term ||
+			   kind == TokenKind::Modifier ||
+			   kind == TokenKind::Function ||/* type == FunctionDecl ||*/
+			   ((prev_tk && prev_tk->stype == SyntaxType::Expr) && (type == RightBrace || type == RightBracket))) {
 		/* ->{ or $hash{ or map { or {key}{ or [idx]{ */
 		return true;
 	}
@@ -304,8 +297,8 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 		TokenKind::Kind kind = t->info.kind;
 		switch (type) {
 		case LeftBracket: case LeftParenthesis:
-		case ArrayDereference: case HashDereference: case ScalarDereference:
-		case ArraySizeDereference: {
+		case ArrayDereference: case HashDereference:
+		case ScalarDereference: case ArraySizeDereference: {
 			if (pos + 1 == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
 			pos++;
 			Token *syntax = parseSyntax(t, tokens);
@@ -315,22 +308,19 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 			break;
 		}
 		case LeftBrace: {
+			if ((pos + 1) == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
 			Token *prev = (pos != start_pos) ? ITER_CAST(Token *, pos-1) : NULL;
-			if (prev) prev_type = prev->info.type;
-			if (pos + 1 == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
+			prev_type = (prev) ? prev->info.type : Undefined;
 			pos++;
 			Token *syntax = parseSyntax(t, tokens);
 			if (isExpr(syntax, prev_syntax, prev_type, prev_kind)) {
 				syntax->stype = SyntaxType::Expr;
-			} else if (prev_type == FunctionDecl) {
-				/* LeftBrace is Expr but assign stype of BlockStmt */
-				syntax->stype = SyntaxType::BlockStmt;
-			} else if (prev_kind == TokenKind::Do) {
+			} else if (prev_type == FunctionDecl || prev_kind == TokenKind::Do) {
 				syntax->stype = SyntaxType::BlockStmt;
 			} else {
 				syntax->stype = SyntaxType::BlockStmt;
 				if (pos == end_pos) Parser_exception("nothing end flagment", t->finfo.start_line_num);
-				if (pos+1 != tokens->end()) {
+				if ((pos+1) != tokens->end()) {
 					Token *next_tk = ITER_CAST(Token *, pos+1);
 					if (next_tk && next_tk->info.type != SemiColon) {
 						intermediate_pos = pos;
@@ -372,6 +362,32 @@ Token *Parser::parseSyntax(Token *start_token, Tokens *tokens)
 	return new Token(new_tokens);
 }
 
+void Parser::insertExpr(Token *syntax, int idx, size_t grouping_num)
+{
+	size_t tk_n = syntax->token_num;
+	Token **tks = syntax->tks;
+	Token *tk = tks[idx];
+	Tokens *expr = new Tokens();
+	expr->push_back(tk);
+	for (size_t i = 1; i < grouping_num; i++) {
+		expr->push_back(tks[idx+i]);
+	}
+	Token *expr_ = new Token(expr);
+	expr_->stype = SyntaxType::Expr;
+	tks[idx] = expr_;
+	if (tk_n == idx+grouping_num) {
+		for (size_t i = 1; i < grouping_num; i++) {
+			syntax->tks[idx+i] = NULL;
+		}
+	} else {
+		memmove(syntax->tks+(idx+1), syntax->tks+(idx+grouping_num),
+				sizeof(Token *) * (tk_n - (idx+grouping_num)));
+		for (size_t i = 1; i < grouping_num; i++) {
+			syntax->tks[tk_n-i] = NULL;
+		}
+	}
+	syntax->token_num -= (grouping_num - 1);
+}
 
 void Parser::insertStmt(Token *syntax, int idx, size_t grouping_num)
 {
@@ -467,14 +483,29 @@ void Parser::parseSpecificStmt(Token *syntax)
 			}
 			break;
 		}
-		case ElseStmt: case Do: case Continue: case DefaultStmt:
+		case ElseStmt: case Continue: case DefaultStmt:
 			if (tk_n > i+1 &&
 				tks[i+1]->stype == SyntaxType::BlockStmt) {
 				/* else BlockStmt */
 				insertStmt(syntax, i, 2);
 				tk_n -= 1;
 				parseSpecificStmt(tks[i]->tks[1]);
-				//i += 1;
+			}
+			break;
+		case Do:
+			if (tk_n > i+1 &&
+				tks[i+1]->stype == SyntaxType::BlockStmt) {
+				/* do BlockStmt */
+				insertStmt(syntax, i, 2);
+				tk_n -= 1;
+				parseSpecificStmt(tks[i]->tks[1]);
+			} else if (tk_n > i+3 &&
+					   tks[i+1]->info.kind == TokenKind::Term &&
+					   tks[i+2]->stype == SyntaxType::Expr) {
+				size_t pattern_size = 4;
+				insertExpr(syntax, i, pattern_size);
+				tk_n -= (pattern_size - 1);
+				parseSpecificStmt(tks[i]->tks[pattern_size-1]);
 			}
 			break;
 		case FunctionDecl:
@@ -709,11 +740,11 @@ Node *Parser::_parse(Token *root)
 				/* Nameless Block */
 				cur_stype = BlockStmt;
 				Node *stmt = _parse(tk);
-				if (TYPE_match(stmt, HashRefNode)) {
+				if (stmt && TYPE_match(stmt, HashRefNode)) {
 					link(pctx, pctx->lastNode(), stmt);
 				} else {
 					BlockNode *block = new BlockNode(tk);
-					block->body = stmt->getRoot();
+					block->body = (stmt) ? stmt->getRoot() : NULL;
 					parseStmt(pctx, block);
 				}
 				break;
@@ -753,7 +784,18 @@ Node *Parser::_parse(Token *root)
 	if (pctx->nodes->size() > 1) {
 		assert(pctx->nodes->size() == 2 && "parse error!! nodes too large size");
 		node = pctx->nodes->at(0);
-		extra_node = pctx->nodes->at(1);
+		if (TYPE_match(node, LabelNode)) {
+			Node *child = pctx->nodes->at(1);
+			node->next = child;
+			child->parent = node;
+			return child;
+			//return node->next;
+		} else {
+			extra_node = pctx->nodes->at(1);
+		}
+	} else if (node && TYPE_match(node, LabelNode)) {
+		Node *child = node->next;
+		child->parent = node;
 	}
 	return node;
 }
@@ -793,7 +835,7 @@ void Parser::parseToken(ParseContext *pctx, Token *tk)
 		DBG_PL("CALL");
 		parseFunctionCall(pctx, tk);
 		break;
-	case Stmt:
+	case Stmt: case Do:
 		DBG_PL("STMT");
 		parseSpecificStmt(pctx, tk);
 		break;
@@ -830,6 +872,7 @@ void Parser::parseStmt(ParseContext *pctx, Node *stmt)
 		pctx->pushNode(stmt);
 		return;
 	}
+	for (; prev_stmt->next; prev_stmt = prev_stmt->next) {}
 	prev_stmt->next = stmt;
 	stmt->parent = prev_stmt;
 	pctx->nodes->swapLastNode(stmt);
@@ -848,8 +891,12 @@ void Parser::link(ParseContext *pctx, Node *from_node, Node *to_node)
 		pctx->pushNode(to_node);
 	} else if (TYPE_match(from_node, BranchNode)) {
 		BranchNode *branch = dynamic_cast<BranchNode *>(from_node);
-		if (branch->right) pctx->pushNode(to_node);
-		else branch->link(to_node);
+		if (branch->right) {
+			if (TYPE_match(branch->right, FunctionCallNode)) branch->link(to_node);
+			else pctx->pushNode(to_node);
+		} else {
+			branch->link(to_node);
+		}
 	} else if (TYPE_match(from_node, FunctionCallNode)) {
 		FunctionCallNode *func = dynamic_cast<FunctionCallNode *>(from_node);
 		if (to_node) func->setArgs(to_node);
@@ -869,6 +916,10 @@ void Parser::parseSymbol(ParseContext *pctx, Token *tk)
 {
 	using namespace TokenType;
 	if (tk->info.type == LeftParenthesis) {
+		Token *next_tk = pctx->nextToken();
+		if (next_tk && next_tk->info.kind == TokenKind::Decl) {
+			pctx->next();
+		}
 		Node *node = _parse(pctx->nextToken());
 		if (!node) {
 			tk->data = "()";
@@ -907,12 +958,15 @@ void Parser::parseSymbol(ParseContext *pctx, Token *tk)
 	} else if (tk->info.type == LeftBrace) {
 		SyntaxType::Type parent_stype = cur_stype;
 		Node *node = _parse(pctx->nextToken());
+		if (parent_stype == SyntaxType::BlockStmt) return;
 		if (!node) {
 			tk->data = "{}";
 			HashRefNode *hash = new HashRefNode(tk);
 			pctx->pushNode(hash);
 			for (; !pctx->end(); pctx->next()) {}
-		} else if (node->tk->info.type == Comma || node->tk->info.type == Arrow) {
+		} else if (node->tk->info.type == Comma || node->tk->info.type == Arrow ||
+				   node->tk->info.type == GlobalVar || node->tk->info.type == Var ||
+				   node->tk->info.type == Key) {
 			tk->data = "{}";
 			HashRefNode *hash = new HashRefNode(tk);
 			hash->data = node;
@@ -1061,6 +1115,16 @@ void Parser::parseSpecificStmt(ParseContext *pctx, Token *tk)
 {
 	using namespace TokenType;
 	switch (tk->info.type) {
+	case TokenType::Do: {
+		DoStmtNode *do_stmt = new DoStmtNode(tk);
+		Token *next_tk = pctx->nextToken();
+		if (!next_tk) Parser_exception("near by do statement", tk->finfo.start_line_num);
+		Node *stmt = _parse(next_tk);
+		do_stmt->stmt = (stmt) ? stmt->getRoot() : NULL;
+		pctx->pushNode(do_stmt);
+		pctx->next();
+		break;
+	}
 	case TokenType::IfStmt:
 	case TokenType::UnlessStmt: {
 		IfStmtNode *if_stmt = new IfStmtNode(tk);
@@ -1141,14 +1205,33 @@ void Parser::parseSpecificStmt(ParseContext *pctx, Token *tk)
 		pctx->next(idx);
 		break;
 	}
-	case TokenType::WhileStmt: {
+	case TokenType::UntilStmt: case TokenType::WhileStmt: {
 		WhileStmtNode *while_stmt = new WhileStmtNode(tk);
 		Node *expr_node = _parse(pctx->token(tk, 1));
 		while_stmt->expr = expr_node->getRoot();
 		cur_stype = SyntaxType::Value;
-		Node *block_stmt_node = _parse(pctx->token(tk, 2));
-		while_stmt->true_stmt = block_stmt_node->getRoot();
-		pctx->pushNode(while_stmt);
+		Token *block_or_stmt_end_node = pctx->token(tk, 2);
+		if (block_or_stmt_end_node->info.type != TokenType::SemiColon) {
+			Node *block_node = _parse(pctx->token(tk, 2));
+			while_stmt->true_stmt = (block_node) ? block_node->getRoot() : NULL;
+			pctx->pushNode(while_stmt);
+		} else {
+			Node *node = pctx->nodes->at(0);
+			LabelNode *label = dynamic_cast<LabelNode *>(node);
+			assert((pctx->nodes->size() == 1 || (label && pctx->nodes->size() == 2)) && "syntax error! near by postposition if statement");
+			if (label) {
+				Node *true_stmt_node = pctx->nodes->at(1);
+				while_stmt->true_stmt = true_stmt_node;
+				label->next = while_stmt;
+				pctx->nodes->clear();
+				pctx->pushNode(label);
+			} else {
+				Node *true_stmt_node = pctx->nodes->at(0);
+				while_stmt->true_stmt = true_stmt_node;
+				pctx->nodes->clear();
+				pctx->pushNode(while_stmt);
+			}
+		}
 		pctx->next(2);
 		break;
 	}
@@ -1163,7 +1246,7 @@ void Parser::parseSingleTermOperator(ParseContext *pctx, Token *tk)
 	TokenType::Type type = tk->info.type;
 	SingleTermOperatorNode *op_node = NULL;
 	if ((type == IsNot || type == Ref || type == Add || type == BitAnd ||
-		 type == ArraySize || type == Sub   || type == BitNot) ||
+		 type == ArraySize || type == Sub   || type == BitNot || type == Glob) ||
 		((type == Inc || type == Dec) && pctx->idx == 0)) {
 		Token *next_tk = pctx->token(tk, 1);
 		assert(next_tk && "syntax error near by single term operator");
@@ -1205,23 +1288,52 @@ bool Parser::isSingleTermOperator(ParseContext *pctx, Token *tk)
 {
 	using namespace TokenType;
 	TokenType::Type type = tk->info.type;
-	if (type == IsNot || type == Ref || type == Inc || type == ArraySize ||
+	if (type == IsNot || type == Ref || type == Inc || type == ArraySize || type == Glob ||
 		type == Dec   || type == BitNot) return true;
 	if ((type == Add || type == Sub || type == BitAnd) && pctx->idx == 0) return true;
 	return false;
+}
+
+void Parser::parseThreeTermOperator(ParseContext *pctx, Token *tk)
+{
+	ThreeTermOperatorNode *term = new ThreeTermOperatorNode(tk);
+	Node *cond = pctx->nodes->lastNode();
+	if (!cond) Parser_exception("nothing expr neary by ThreeTermOperator", tk->finfo.start_line_num);
+	pctx->nodes->pop_back();
+	Node *true_expr = _parse(pctx->nextToken());
+	pctx->next();
+	pctx->next();
+	Node *false_expr = _parse(pctx->nextToken());
+	pctx->next();
+	term->cond = cond;
+	term->true_expr = true_expr;
+	term->false_expr = false_expr;
+	Node *node = pctx->lastNode();
+	return (!node) ? pctx->pushNode(term) : link(pctx, node, term);
 }
 
 void Parser::parseBranchType(ParseContext *pctx, Token *tk)
 {
 	if (isSingleTermOperator(pctx, tk)) {
 		parseSingleTermOperator(pctx, tk);
+	} else if (tk->info.type == TokenType::ThreeTermOperator) {
+		parseThreeTermOperator(pctx, tk);
 	} else {
 		Node *node = pctx->lastNode();
-		assert(node && "syntax error!: nothing value before xxx");
-		BranchNode *branch = new BranchNode(tk);
-		branch->left = node;
-		node->parent = branch;
-		pctx->nodes->swapLastNode(branch);
+		if (!node && tk->info.type == TokenType::PolymorphicCompare) {
+			//~~term => [~] + [~] + [term] <=> [term]
+			Token *next_tk = pctx->nextToken();
+			if (!next_tk) return;
+			Node *node = new LeafNode(next_tk);
+			pctx->pushNode(node);
+			pctx->next();
+		} else {
+			assert(node && "syntax error!: nothing value before xxx");
+			BranchNode *branch = new BranchNode(tk);
+			branch->left = node;
+			node->parent = branch;
+			pctx->nodes->swapLastNode(branch);
+		}
 	}
 }
 
@@ -1250,7 +1362,10 @@ void Parser::parseFunction(ParseContext *pctx, Token *tk)
 	} else if ((tk->info.type == TokenType::Function || tk->info.type == TokenType::Namespace) &&
 		next_tk && next_tk->stype == BlockStmt) {
 		/* sub name {} */
+		SyntaxType::Type stype = cur_stype;
+		cur_stype = BlockStmt;
 		Node *block_stmt_node = _parse(pctx->nextToken());
+		cur_stype = stype;
 		f->body = (block_stmt_node) ? block_stmt_node->getRoot() : NULL;
 		pctx->next();
 	} else {
@@ -1374,6 +1489,21 @@ void Parser::parseTerm(ParseContext *pctx, Token *tk)
 			pctx->next();
 		}
 		term = reg;
+	} else if (next_tk && next_tk->info.type == TokenType::Colon) {
+		//LABEL:
+		pctx->next();
+		term = new LabelNode(tk);
+	} else if (tk->info.type == TokenType::HandleDelim) {
+		//<$fh>
+		Token *handle_name = pctx->nextToken();
+		pctx->next();
+		term = new HandleReadNode(handle_name);
+		Token *handle_end_delimiter = pctx->nextToken();
+		if (!handle_end_delimiter ||
+			handle_end_delimiter->info.type != TokenType::HandleDelim) {
+			Parser_exception("", handle_name->finfo.start_line_num);
+		}
+		pctx->next();
 	} else {
 		term = new LeafNode(tk);
 	}

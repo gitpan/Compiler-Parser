@@ -6,6 +6,7 @@ README.md
 builder/MyBuilder.pm
 cpanfile
 cpanfile.snapshot
+example/benchmark.pl
 example/map.pl
 example/operator.pl
 example/pow.pl
@@ -27,14 +28,18 @@ lib/Compiler/Parser/Node/ArrayRef.pm
 lib/Compiler/Parser/Node/Block.pm
 lib/Compiler/Parser/Node/Branch.pm
 lib/Compiler/Parser/Node/Dereference.pm
+lib/Compiler/Parser/Node/DoStmt.pm
 lib/Compiler/Parser/Node/ElseStmt.pm
 lib/Compiler/Parser/Node/ForStmt.pm
 lib/Compiler/Parser/Node/ForeachStmt.pm
 lib/Compiler/Parser/Node/Function.pm
 lib/Compiler/Parser/Node/FunctionCall.pm
+lib/Compiler/Parser/Node/Handle.pm
+lib/Compiler/Parser/Node/HandleRead.pm
 lib/Compiler/Parser/Node/Hash.pm
 lib/Compiler/Parser/Node/HashRef.pm
 lib/Compiler/Parser/Node/IfStmt.pm
+lib/Compiler/Parser/Node/Label.pm
 lib/Compiler/Parser/Node/Leaf.pm
 lib/Compiler/Parser/Node/List.pm
 lib/Compiler/Parser/Node/Module.pm
@@ -44,6 +49,7 @@ lib/Compiler/Parser/Node/RegReplace.pm
 lib/Compiler/Parser/Node/Regexp.pm
 lib/Compiler/Parser/Node/Return.pm
 lib/Compiler/Parser/Node/SingleTermOperator.pm
+lib/Compiler/Parser/Node/ThreeTermOperator.pm
 lib/Compiler/Parser/Node/WhileStmt.pm
 minil.toml
 src/Compiler-Parser.xs
@@ -57,6 +63,7 @@ src/compiler/util/Compiler_util.cpp
 src/typemap
 t/Compiler-Parser.t
 t/array.t
+t/black_perl.t
 t/code.t
 t/empty.t
 t/error.t
@@ -73,6 +80,7 @@ t/plack_builder.t
 t/plack_component.t
 t/regex.t
 t/reported_issue.t
+t/statement/do.t
 t/statement/if.t
 t/statement/loop.t
 t/statement/missing_semicolon.t

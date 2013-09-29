@@ -14,7 +14,7 @@ configure_requires:
   Module::Build: 0.38
   Module::Build::XSUtil: 0.02
 dynamic_config: 0
-generated_by: 'Minilla/v0.6.5, CPAN::Meta::Converter version 2.132510'
+generated_by: 'Minilla/v0.6.5, CPAN::Meta::Converter version 2.132140'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -28,7 +28,7 @@ no_index:
 provides:
   Compiler::Parser:
     file: lib/Compiler/Parser.pm
-    version: 0.06
+    version: 0.07
   Compiler::Parser::AST:
     file: lib/Compiler/Parser/AST.pm
   Compiler::Parser::AST::Renderer:
@@ -51,6 +51,8 @@ provides:
     file: lib/Compiler/Parser/Node/Branch.pm
   Compiler::Parser::Node::Dereference:
     file: lib/Compiler/Parser/Node/Dereference.pm
+  Compiler::Parser::Node::DoStmt:
+    file: lib/Compiler/Parser/Node/DoStmt.pm
   Compiler::Parser::Node::ElseStmt:
     file: lib/Compiler/Parser/Node/ElseStmt.pm
   Compiler::Parser::Node::ForStmt:
@@ -61,12 +63,18 @@ provides:
     file: lib/Compiler/Parser/Node/Function.pm
   Compiler::Parser::Node::FunctionCall:
     file: lib/Compiler/Parser/Node/FunctionCall.pm
+  Compiler::Parser::Node::Handle:
+    file: lib/Compiler/Parser/Node/Handle.pm
+  Compiler::Parser::Node::HandleRead:
+    file: lib/Compiler/Parser/Node/HandleRead.pm
   Compiler::Parser::Node::Hash:
     file: lib/Compiler/Parser/Node/Hash.pm
   Compiler::Parser::Node::HashRef:
     file: lib/Compiler/Parser/Node/HashRef.pm
   Compiler::Parser::Node::IfStmt:
     file: lib/Compiler/Parser/Node/IfStmt.pm
+  Compiler::Parser::Node::Label:
+    file: lib/Compiler/Parser/Node/Label.pm
   Compiler::Parser::Node::Leaf:
     file: lib/Compiler/Parser/Node/Leaf.pm
   Compiler::Parser::Node::List:
@@ -85,6 +93,8 @@ provides:
     file: lib/Compiler/Parser/Node/Return.pm
   Compiler::Parser::Node::SingleTermOperator:
     file: lib/Compiler/Parser/Node/SingleTermOperator.pm
+  Compiler::Parser::Node::ThreeTermOperator:
+    file: lib/Compiler/Parser/Node/ThreeTermOperator.pm
   Compiler::Parser::Node::WhileStmt:
     file: lib/Compiler/Parser/Node/WhileStmt.pm
 requires:
@@ -94,7 +104,7 @@ resources:
   bugtracker: https://github.com/goccy/p5-Compiler-Parser/issues
   homepage: https://github.com/goccy/p5-Compiler-Parser
   repository: git://github.com/goccy/p5-Compiler-Parser.git
-version: 0.06
+version: 0.07
 x_contributors:
   - 'masaaki.goshima <masaaki.goshima@mixi.co.jp>'
   - 'Syohei YOSHIDA <syohex@gmail.com>'

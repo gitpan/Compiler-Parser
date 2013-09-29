@@ -58,7 +58,7 @@
    "provides" : {
       "Compiler::Parser" : {
          "file" : "lib/Compiler/Parser.pm",
-         "version" : "0.06"
+         "version" : "0.07"
       },
       "Compiler::Parser::AST" : {
          "file" : "lib/Compiler/Parser/AST.pm"
@@ -93,6 +93,9 @@
       "Compiler::Parser::Node::Dereference" : {
          "file" : "lib/Compiler/Parser/Node/Dereference.pm"
       },
+      "Compiler::Parser::Node::DoStmt" : {
+         "file" : "lib/Compiler/Parser/Node/DoStmt.pm"
+      },
       "Compiler::Parser::Node::ElseStmt" : {
          "file" : "lib/Compiler/Parser/Node/ElseStmt.pm"
       },
@@ -108,6 +111,12 @@
       "Compiler::Parser::Node::FunctionCall" : {
          "file" : "lib/Compiler/Parser/Node/FunctionCall.pm"
       },
+      "Compiler::Parser::Node::Handle" : {
+         "file" : "lib/Compiler/Parser/Node/Handle.pm"
+      },
+      "Compiler::Parser::Node::HandleRead" : {
+         "file" : "lib/Compiler/Parser/Node/HandleRead.pm"
+      },
       "Compiler::Parser::Node::Hash" : {
          "file" : "lib/Compiler/Parser/Node/Hash.pm"
       },
@@ -116,6 +125,9 @@
       },
       "Compiler::Parser::Node::IfStmt" : {
          "file" : "lib/Compiler/Parser/Node/IfStmt.pm"
+      },
+      "Compiler::Parser::Node::Label" : {
+         "file" : "lib/Compiler/Parser/Node/Label.pm"
       },
       "Compiler::Parser::Node::Leaf" : {
          "file" : "lib/Compiler/Parser/Node/Leaf.pm"
@@ -144,6 +156,9 @@
       "Compiler::Parser::Node::SingleTermOperator" : {
          "file" : "lib/Compiler/Parser/Node/SingleTermOperator.pm"
       },
+      "Compiler::Parser::Node::ThreeTermOperator" : {
+         "file" : "lib/Compiler/Parser/Node/ThreeTermOperator.pm"
+      },
       "Compiler::Parser::Node::WhileStmt" : {
          "file" : "lib/Compiler/Parser/Node/WhileStmt.pm"
       }
@@ -159,7 +174,7 @@
          "web" : "https://github.com/goccy/p5-Compiler-Parser"
       }
    },
-   "version" : "0.06",
+   "version" : "0.07",
    "x_contributors" : [
       "masaaki.goshima <masaaki.goshima@mixi.co.jp>",
       "Syohei YOSHIDA <syohex@gmail.com>"
