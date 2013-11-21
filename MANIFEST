@@ -13,6 +13,7 @@ example/pow.pl
 example/priority.pl
 example/single_term_operator.pl
 include/common.hpp
+include/deparser.hpp
 include/gen_token.hpp
 include/parser.hpp
 include/token.hpp
@@ -57,9 +58,11 @@ src/ast_to_sv.cpp
 src/compiler/parser/Compiler_completer.cpp
 src/compiler/parser/Compiler_node.cpp
 src/compiler/parser/Compiler_parser.cpp
+src/compiler/parser/deparser.cpp
 src/compiler/util/Compiler_gen_token_decl.cpp
 src/compiler/util/Compiler_token.cpp
 src/compiler/util/Compiler_util.cpp
+src/sv_to_ast.cpp
 src/typemap
 t/Compiler-Parser.t
 t/array.t
