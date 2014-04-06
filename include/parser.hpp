@@ -46,6 +46,14 @@ public:
 	void dump(size_t depth);
 };
 
+class CodeDereferenceNode : public Node {
+public:
+	Node *name;
+	Node *args;
+	CodeDereferenceNode(Token *tk);
+	void dump(size_t depth);
+};
+
 class ArrayNode : public Node {
 public:
 	Node *idx;
@@ -200,6 +208,11 @@ public:
 	LeafNode(Token *tk);
 };
 
+class ControlStmtNode : public Node {
+public:
+	ControlStmtNode(Token *tk);
+};
+
 class IfStmtNode : public Node {
 public:
 	Node *expr;
@@ -281,6 +294,22 @@ public:
 	void next(int progress);
 };
 
+class TokenManager {
+public:
+	TokenManager(void);
+	void insertToken(Token *tk, size_t idx, Token *target);
+	void closeToken(Token *tk, size_t base_idx, size_t start_idx, size_t close_num);
+};
+
+class TokenFactory {
+public:
+	TokenFactory(void);
+	Token *makeExprToken(Token **base, size_t start_idx, size_t end_idx);
+	Token *makeTermToken(Token **base, size_t start_idx, size_t end_idx);
+	Token *makeListToken(Token *base);
+	Token *makePointerToken(Token *base);
+};
+
 class Parser {
 public:
 	TokenPos start_pos;
@@ -305,24 +334,30 @@ public:
 	Node *_parse(Token *root);
 	void link(ParseContext *pctx, Node *from, Node *to);
 	bool isForeach(ParseContext *pctx, Token *tk);
+	bool isPostPositionCase(Token *tk);
 	bool isForStmtPattern(Token *tk, Token *expr);
 	bool isSingleTermOperator(ParseContext *pctx, Token *tk);
 	bool isIrregularFunction(ParseContext *pctx, Token *tk);
 	bool isMissingSemicolon(Enum::Token::Type::Type prev_type, Enum::Token::Type::Type type, Tokens *tokens);
 	bool isMissingSemicolon(Tokens *tokens);
 	bool canGrouping(Token *tk, Token *next_tk);
+	bool needsCompleteListForArray(ParseContext *pctx, BranchNode *brancb, Node *node);
+	bool needsCompleteListForExecutionCodeRef(ParseContext *pctx, BranchNode *brancb, Node *node);
+	bool needsCompleteListForListDeclaration(ParseContext *pctx, BranchNode *brancb, Node *node);
 	Token *replaceToStmt(Tokens *tokens, Token *cur_tk, size_t offset);
 	void parseStmt(ParseContext *pctx, Node *stmt);
 	void parseExpr(ParseContext *pctx, Node *expr);
 	void parseToken(ParseContext *pctx, Token *tk);
 	void parseModifier(ParseContext *pctx, Token *term);
 	void parseTerm(ParseContext *pctx, Token *term);
+	void parseHandle(ParseContext *pctx, Token *handle);
 	void parseSymbol(ParseContext *pctx, Token *symbol);
 	void parseSingleTermOperator(ParseContext *pctx, Token *op);
 	void parseThreeTermOperator(ParseContext *pctx, Token *op);
 	void parseBranchType(ParseContext *pctx, Token *branch);
 	void parseSpecificKeyword(ParseContext *pctx, Token *stmt);
 	void parseSpecificStmt(ParseContext *pctx, Token *stmt);
+	void parseControlStmt(ParseContext *pctx, Token *stmt);
 	void parseDecl(ParseContext *pctx, Token *comma);
 	void parseModule(ParseContext *pctx, Token *mod);
 	void parseModuleArgument(ParseContext *pctx, Token *args);
@@ -338,20 +373,256 @@ private:
 	void insertParenthesis(Tokens *tokens);
 };
 
-class Completer {
+class SyntaxCompleter {
+public:
+	SyntaxCompleter(void);
+	void insertTerm(Token *tk, int idx, size_t grouping_num);
+	void insertExpr(Token *tk, int idx, size_t grouping_num);
+	virtual bool complete(Token *root, size_t current_idx);
+};
+
+class SyntaxRecoverer {
+public:
+	SyntaxRecoverer(void);
+	virtual bool recovery(Token *root, size_t current_idx);
+};
+
+class TermCompleter : public SyntaxCompleter {
+public:
+	TermCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool isVariable(Token *tk);
+	bool isOperatorTarget(Token *tk);
+	bool isFunctionCall(Token *prev_tk, Token *tk);
+	bool isBasicTerm(Token *tk, size_t current_idx);
+	bool isDereferenceTerm(Token *tk, size_t current_idx);
+	bool isRegexTerm(Token *tk, size_t current_idx);
+	bool isRegexWithoutPrefixTerm(Token *tk, size_t current_idx);
+	bool isRegexReplaceTerm(Token *tk, size_t current_idx);
+	bool isRegexReplaceTermWithDoubleMiddleDelim(Token *tk, size_t current_idx);
+	bool isHandleTerm(Token *tk, size_t current_idx);
+	bool isAnonymousFunctionTerm(Token *tk, size_t current_idx);
+	bool isCodeRefTerm(Token *tk, size_t current_idx);
+	bool isFunctionCallWithParenthesis(Token *tk, size_t current_idx);
+	bool isVariableDecl(Token *tk, size_t current_idx);
+	bool isGlobTerm(Token *tk, size_t current_idx);
+};
+
+class PointerCompleter : public SyntaxCompleter {
+public:
+	PointerCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	void insertPointerToken(Token *root);
+private:
+	bool isPointer(Token *tk, size_t current_idx);
+	bool isPointerChainElement(Token *tk);
+	bool isPointerChainElementOfExpr(Token *tk);
+	bool isPointerChainElementOfTerm(Token *tk);
+	size_t _insertPointerToken(Token *tk, size_t current_idx);
+	bool canContinuousPointerChain(Token *tk, Token *next_tk);
+	bool notContinuousPointerChainElement(Token *tk);
+	bool notContinuousPointerChainElementOfExpr(Token *tk);
+	bool isArrayOrHashExpr(Token *tk, Token *next_tk);
+};
+
+class ReturnCompleter : public SyntaxCompleter {
+public:
+	ReturnCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool isOperatorTarget(Token *tk);
+	bool isReturnTerm(Token *tk, size_t current_idx);
+};
+
+class NamedUnaryOperatorCompleter : public SyntaxCompleter, public SyntaxRecoverer {
 public:
 	std::vector<std::string> *named_unary_keywords;
+	NamedUnaryOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool recovery(Token *tk, size_t current_idx);
+private:
+	bool isNamedUnaryFunction(Token *tk, size_t current_idx);
+	bool isUnaryOperator(Token *tk, size_t current_idx);
+	bool isUnaryKeyword(std::string target);
+	bool isStatementController(Token *tk, size_t current_idx);
+	bool isStatementControlKeyword(Token *tk);
+	bool isHandle(Token *tk, size_t current_idx);
+	bool shouldRecovery(Token *tk, size_t current_idx);
+	void recoveryArgument(Token *tk, size_t current_idx);
+};
+
+class SpecialOperatorCompleter : public SyntaxCompleter {
+public:
+	SpecialOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool isIncDecType(Token *tk);
+	bool isLeftIncDecExpr(Token *tk, size_t current_idx);
+	bool isRightIncDecExpr(Token *tk, size_t current_idx);
+};
+
+class PowerCompleter : public SyntaxCompleter {
+public:
+	PowerCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isPower(Token *tk, int current_idx);
+};
+
+class RegexpMatchCompleter : public SyntaxCompleter {
+public:
+	RegexpMatchCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isRegexpMatch(Token *tk, int current_idx);
+};
+
+class HighPriorityDoubleOperatorCompleter : public SyntaxCompleter {
+public:
+	HighPriorityDoubleOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isHighPriorityDoubleOperator(Token *tk, size_t current_idx);
+};
+
+class LowPriorityDoubleOperatorCompleter : public SyntaxCompleter {
+public:
+	LowPriorityDoubleOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isLowPriorityDoubleOperator(Token *tk, size_t current_idx);
+};
+
+class ShiftCompleter : public SyntaxCompleter {
+public:
+	ShiftCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isShiftOperator(Token *tk, size_t current_idx);
+};
+
+class HighPriorityCompareOperatorCompleter : public SyntaxCompleter {
+public:
+	HighPriorityCompareOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isHighPriorityCompareOperator(Token *tk, size_t current_idx);
+};
+
+class LowPriorityCompareOperatorCompleter : public SyntaxCompleter {
+public:
+	LowPriorityCompareOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isLowPriorityCompareOperator(Token *tk, size_t current_idx);
+};
+
+class BitOperatorCompleter : public SyntaxCompleter {
+public:
+	BitOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isBitOperator(Token *tk, size_t current_idx);
+};
+
+class AndOperatorCompleter : public SyntaxCompleter {
+public:
+	AndOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isAndOperator(Token *tk, size_t current_idx);
+};
+
+class OrOperatorCompleter : public SyntaxCompleter {
+public:
+	OrOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isOrOperator(Token *tk, size_t current_idx);
+};
+
+class AssignCompleter : public SyntaxCompleter {
+public:
+	AssignCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isAssign(Token *tk, int current_idx);
+};
+
+class ArrowCompleter : public SyntaxCompleter {
+public:
+	ArrowCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isArrow(Token *tk, size_t current_idx);
+};
+
+class CommaCompleter : public SyntaxCompleter {
+public:
+	CommaCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isComma(Token *tk, size_t current_idx);
+};
+
+class AlphabetBitOperatorCompleter : public SyntaxCompleter {
+public:
+	AlphabetBitOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+private:
+	bool isAlphabetBitOperator(Token *tk, size_t current_idx);
+};
+
+class SingleTermOperatorCompleter : public SyntaxCompleter {
+public:
+	SingleTermOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool isSimpleSingleTermOperator(Token *tk, size_t current_idx);
+	bool isSingleTermOperator(Token *tk, size_t current_idx);
+	bool isOperatorTarget(Token *tk);
+};
+
+class ThreeTermOperatorCompleter : public SyntaxCompleter {
+public:
+	ThreeTermOperatorCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool isThreeTermOperator(Token *tk, size_t current_idx);
+};
+
+class FunctionListCompleter : public SyntaxCompleter, public SyntaxRecoverer {
+public:
+	FunctionListCompleter(void);
+	bool complete(Token *root, size_t current_idx);
+	bool recovery(Token *root, size_t current_idx);
+private:
+	bool isPrintFunction(Token *tk);
+	bool isFunctionCallWithoutParenthesis(Token *tk, size_t current_idx);
+	bool isFunctionList(Token *tk, size_t current_idx);
+	bool shouldRecovery(Token *tk, size_t current_idx);
+	bool shouldRecoveryBaseExpr(Token *tk, Token *next_tk);
+	bool shouldRecoveryBaseTerm(Token *tk, Token *next_tk);
+	void recoveryArgument(Token *tk, size_t current_idx);
+};
+
+class BlockArgsFunctionCompleter : public SyntaxCompleter {
+public:
+	std::vector<std::string> *block_args_function_keywords;
+	BlockArgsFunctionCompleter(void);
+	bool complete(Token *tk, size_t current_idx);
+	bool isBlockArgsFunction(Token *tk, int current_idx);
+	bool isOnlyBlockArgFunction(Token *tk, int current_idx);
+	bool isOperatorTarget(Token *tk);
+	bool isBlockArgsFunctionKeyword(std::string target);
+};
+
+class Completer {
+public:
 
 	Completer(void);
-	bool isUnaryKeyword(std::string target);
+	void templateEvaluatedFromLeft(Token *root, SyntaxCompleter *completer);
+	void templateEvaluatedFromRight(Token *root, SyntaxCompleter *completer);
 	void complete(Token *root);
 	void completeTerm(Token *root);
-	void insertExpr(Token *syntax, int idx, size_t grouping_num);
-	void insertTerm(Token *syntax, int idx, size_t grouping_num);
-	void completeExprFromLeft(Token *root, Enum::Token::Type::Type type);
-	void completeExprFromRight(Token *root, Enum::Token::Type::Type type);
-	void completeExprFromRight(Token *root, Enum::Token::Kind::Kind kind);
 	void completePointerExpr(Token *root);
+	void completeBlockArgsFunctionExpr(Token *root);
 	void completeIncDecGlobExpr(Token *root);
 	void completePowerExpr(Token *root);
 	void completeSingleTermOperatorExpr(Token *root);
@@ -368,9 +639,10 @@ public:
 	void completeAssignExpr(Token *root);
 	void completeCommaArrowExpr(Token *root);
 	void completeFunctionListExpr(Token *root);
+	void completeReturn(Token *root);
 	void completeAlphabetBitOperatorExpr(Token *root);
-	void recoveryFunctionArgument(Token *root);
-	void recoveryNamedUnaryOperatorsArgument(Token *root);
+	void recoveryFunctionArgument(Token *root, SyntaxRecoverer *recoverer);
+	void recoveryNamedUnaryOperatorsArgument(Token *root, SyntaxRecoverer *recoverer);
 };
 
 #define TYPE_match(ptr, T) typeid(*ptr) == typeid(T)

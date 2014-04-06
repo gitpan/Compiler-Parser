@@ -8,6 +8,8 @@ extern "C" {
 #include "perl.h"
 #include "XSUB.h"
 #include "ppport.h"
+#undef  dNOOP // Hack to work around "error: declaration of 'Perl___notused' has a different language linkage" error message on clang.
+#define dNOOP
 #define new_Array() (AV*)sv_2mortal((SV*)newAV())
 #define new_Hash() (HV*)sv_2mortal((SV*)newHV())
 #define new_String(s, len) sv_2mortal(newSVpv(s, len))
@@ -49,7 +51,7 @@ CODE:
 {
 	int tokens_size = av_len(tokens_);
 	if (tokens_size < 0) {
-		RETVAL = NULL;
+		XSRETURN_UNDEF;
 		return;
 	}
 	SV **tokens = tokens_->sv_u.svu_array;
@@ -82,6 +84,10 @@ CODE:
 		tks.push_back(tk);
 	}
 	AST *ast = self->parse(&tks);
+	if (!ast->root) {
+		XSRETURN_UNDEF;
+		return;
+	}
 	//ast->dump();
 	RETVAL = ast_to_sv(aTHX_ ast);
 }

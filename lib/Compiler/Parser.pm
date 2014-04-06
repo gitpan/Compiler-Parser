@@ -2,6 +2,7 @@ package Compiler::Parser;
 use 5.008_001;
 use strict;
 use warnings;
+use Compiler::Parser::AST;
 use Compiler::Parser::Node;
 use Compiler::Parser::Node::Branch;
 use Compiler::Parser::Node::Block;
@@ -18,6 +19,7 @@ use Compiler::Parser::Node::ForeachStmt;
 use Compiler::Parser::Node::WhileStmt;
 use Compiler::Parser::Node::Function;
 use Compiler::Parser::Node::FunctionCall;
+use Compiler::Parser::Node::ControlStmt;
 use Compiler::Parser::Node::IfStmt;
 use Compiler::Parser::Node::ElseStmt;
 use Compiler::Parser::Node::DoStmt;
@@ -30,6 +32,7 @@ use Compiler::Parser::Node::List;
 use Compiler::Parser::Node::ArrayRef;
 use Compiler::Parser::Node::HashRef;
 use Compiler::Parser::Node::Dereference;
+use Compiler::Parser::Node::CodeDereference;
 use Compiler::Parser::Node::Return;
 
 require Exporter;
@@ -38,7 +41,7 @@ our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ( 'all' => [ qw() ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw();
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 require XSLoader;
 XSLoader::load('Compiler::Parser', $VERSION);
 
@@ -65,8 +68,8 @@ sub __add_node {
     push @$module_nodes, @$nodes if (@$nodes);
 }
 
-sub __find_module_nodes {
-    my ($self, $node) = @_;
+sub __find {
+    my ($self, $node_name, $node) = @_;
     my @module_nodes;
     if (ref $node eq 'ARRAY') {
         $self->__add_node_from_array($node, \@module_nodes);
@@ -99,9 +102,9 @@ Compiler::Parser - Create Abstract Syntax Tree for Perl5
     use Compiler::Parser::AST::Renderer;
 
     my $filename = $ARGV[0];
-    open(my $fh, "<", $filename) or die("$filename could not find.");
+    open(my $fh, "<", $filename) or die("Cannot open $filename: $!");
     my $script = do { local $/; <$fh> };
-    my $lexer = Compiler::Lexer->new($filename);
+    my $lexer  = Compiler::Lexer->new($filename);
     my $tokens = $lexer->tokenize($script);
     my $parser = Compiler::Parser->new();
     my $ast = $parser->parse($tokens);
@@ -121,7 +124,7 @@ Compiler::Parser creates abstract syntax tree for perl5.
 
 =item my $ast = $parser->parse($tokens);
 
-    Get array reference includes abstract syntax tree each statement.
+    Get blessed object of Compiler::Parser::AST.
     This method requires $tokens from Compiler::Lexer::tokenize.
 
 =item my $renderer = Compiler::Parser::AST::Renderer->new();
